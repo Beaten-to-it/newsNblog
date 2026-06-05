@@ -78,7 +78,19 @@ def render_markdown(md: str) -> str:
     return "\n".join(body)
 
 
-def page(title: str, content: str, *, description: str = "AI Morning Radar") -> str:
+def page(
+    title: str,
+    content: str,
+    *,
+    description: str = "AI Morning Radar",
+    css_href: str = "assets/style.css",
+    home_href: str = "index.html",
+) -> str:
+    """Render a page using relative links so project GitHub Pages paths work.
+
+    GitHub project pages are served under /newsNblog/, so root-absolute
+    links like /assets/style.css point at the account root and break.
+    """
     return f"""<!doctype html>
 <html lang="ko">
 <head>
@@ -86,11 +98,11 @@ def page(title: str, content: str, *, description: str = "AI Morning Radar") -> 
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="{html.escape(description, quote=True)}">
   <title>{html.escape(title)}</title>
-  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="stylesheet" href="{html.escape(css_href, quote=True)}">
 </head>
 <body>
   <header class="site-header">
-    <a class="brand" href="/">AI Morning Radar</a>
+    <a class="brand" href="{html.escape(home_href, quote=True)}">AI Morning Radar</a>
     <span class="tagline">바쁜 사람을 위한 AI 뉴스 브리핑</span>
   </header>
   <main class="container">
@@ -113,8 +125,11 @@ def main() -> int:
         title = md.splitlines()[0].lstrip("# ").strip() if md.splitlines() else date
         content = f'<article class="post">\n{render_markdown(md)}\n</article>'
         out = SITE_POSTS / f"{date}.html"
-        out.write_text(page(title, content, description=title), encoding="utf-8")
-        posts.append((date, title, f"/posts/{date}.html"))
+        out.write_text(
+            page(title, content, description=title, css_href="../assets/style.css", home_href="../index.html"),
+            encoding="utf-8",
+        )
+        posts.append((date, title, f"posts/{date}.html"))
 
     items = "\n".join(
         f'<li><a href="{href}">{html.escape(title)}</a><time>{date}</time></li>'
