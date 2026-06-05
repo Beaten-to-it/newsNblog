@@ -1,0 +1,2 @@
+date,read,usefulness_1_to_5,liked_items,disliked_items,duplicate_items,x_threads_ratio,geeknews_usefulness_1_to_5,want_more_topics,notes
+2026-06-05,yes,,"","","","","","","Format feedback: remove visible duplicate-check section; link titles directly; provide individual GeekNews/item links; show related sources only when multiple; remove manual questionnaire; remove per-item like/form collection because it makes v0 too complex; remove published-ledger section from public briefing."

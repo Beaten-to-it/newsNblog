@@ -1,0 +1,23 @@
+briefings/*.tmp
+.DS_Store
+Thumbs.db
+.env
+.env.*
+
+# Secrets / OAuth credentials — never commit
+client_secret*.json
+google_client_secret.json
+google_token.json
+*.pem
+*.key
+
+# Local caches
+__pycache__/
+*.pyc
+
+# Generated artifacts; rebuilt by scripts/GitHub Actions
+dist/
+site/
+
+# Local Hermes project state
+.hermes/
