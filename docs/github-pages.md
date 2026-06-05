@@ -2,6 +2,19 @@
 
 이 프로젝트의 블로그는 GitHub Pages 정적 사이트로 게시한다.
 
+## 현재 게시 URL
+
+- Repository: https://github.com/Beaten-to-it/newsNblog
+- GitHub Pages: https://beaten-to-it.github.io/newsNblog/
+- Day 1 post: https://beaten-to-it.github.io/newsNblog/posts/2026-06-05.html
+
+검증 결과:
+
+```text
+GitHub Pages HTTP status: 200 OK
+필수 섹션 확인: 세 줄 요약, AI UseCase
+```
+
 ## 현재 생성된 파일
 
 - 사이트 빌더: `scripts/build_site.py`
