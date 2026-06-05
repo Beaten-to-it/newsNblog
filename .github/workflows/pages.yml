@@ -25,7 +25,12 @@ jobs:
         with:
           python-version: "3.11"
       - name: Render email/blog artifacts
-        run: python scripts/render_briefing.py 2026-06-05
+        shell: bash
+        run: |
+          for f in briefings/*.md; do
+            d="$(basename "$f" .md)"
+            python scripts/render_briefing.py "$d"
+          done
       - name: Build static site
         run: python scripts/build_site.py
       - name: Upload artifact
