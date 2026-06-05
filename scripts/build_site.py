@@ -139,7 +139,7 @@ def main() -> int:
 <section class="hero">
   <p class="eyebrow">Daily AI Briefing</p>
   <h1>AI Morning Radar</h1>
-  <p>AI 뉴스, X/Threads 트렌드, GeekNews 개발자 관점, 실제 UseCase를 아침에 빠르게 읽는 브리핑입니다.</p>
+  <p>AI 뉴스, X/Threads 트렌드, GeekNews 개발자 관점, 세 줄 요약과 AI UseCase를 아침에 빠르게 읽는 브리핑입니다.</p>
 </section>
 <section class="post-list">
   <h2>브리핑 아카이브</h2>
