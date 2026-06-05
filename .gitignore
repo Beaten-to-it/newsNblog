@@ -19,5 +19,9 @@ __pycache__/
 dist/
 site/
 
+# Automation runtime state/logs
+data/.daily_catchup.lock
+data/daily_catchup.log
+
 # Local Hermes project state
 .hermes/

@@ -24,6 +24,7 @@
 8. Gmail API로 HTML 메일을 발송한다.
 9. GitHub에 commit/push한다.
 10. GitHub Actions Pages 배포가 성공했는지 확인한다.
+11. 모든 단계가 성공하면 `data/daily_delivery_log.csv`에 `status=sent` 성공 로그를 남긴다.
 
 ## 발송 대상
 
@@ -52,3 +53,27 @@ hyoya.kim@samsung.com
 - Google OAuth token과 GitHub gh 인증이 이 환경에 저장되어 있어야 한다.
 - Hermes cron은 gateway/scheduler가 실행 중이어야 동작한다.
 - 터미널을 닫아도 실행하려면 `hermes gateway install` / `hermes gateway start`로 서비스화되어 있어야 한다.
+
+## 절전/깨움 보완 실행
+
+PC가 07:00에 절전 상태라면 정기 cron이 실행되지 않을 수 있다. 이를 보완하기 위해 Windows Scheduled Task 두 개를 추가한다.
+
+```text
+newsNblog_Daily_Catchup          # 15분마다 체크
+newsNblog_Daily_Catchup_OnWake   # Windows 절전 해제 이벤트 직후 체크
+```
+
+두 작업은 모두 아래 스크립트를 실행한다.
+
+```text
+C:\Project\newsNblog\scripts\daily_catchup.cmd
+C:\Project\newsNblog\scripts\daily_catchup.py
+```
+
+캐치업 스크립트는 다음 조건일 때만 Hermes cron job을 즉시 실행한다.
+
+1. 현재 시간이 07:00 이후
+2. `data/daily_delivery_log.csv`에 오늘 `status=sent` 로그가 없음
+3. 최근 3시간 내 캐치업 lock이 없음
+
+따라서 절전에서 깨어났을 때 이미 오늘 발송이 끝났으면 아무것도 하지 않고, 아직 발송되지 않았다면 자동으로 보완 발행한다.

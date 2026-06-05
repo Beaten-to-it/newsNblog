@@ -1,0 +1,101 @@
+#!/usr/bin/env python
+"""Catch up the daily newsNblog publish job after sleep/wake.
+
+Runs quietly when nothing is needed. Intended to be called by Windows Task
+Scheduler every 15 minutes. It triggers the Hermes cron job only when:
+- local time is at or after the configured publish hour, and
+- today's successful delivery is not logged yet, and
+- a recent catch-up lock is not present.
+"""
+from __future__ import annotations
+
+import csv
+import os
+import subprocess
+import sys
+from datetime import datetime, timedelta
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+LOG = ROOT / "data" / "daily_delivery_log.csv"
+LOCK = ROOT / "data" / ".daily_catchup.lock"
+CRON_JOB_ID = "3917d9f92061"
+PUBLISH_HOUR = 7
+LOCK_TTL = timedelta(hours=3)
+
+
+def today_key(now: datetime) -> str:
+    return now.strftime("%Y-%m-%d")
+
+
+def already_sent(day: str) -> bool:
+    if not LOG.exists():
+        return False
+    try:
+        with LOG.open("r", encoding="utf-8", newline="") as f:
+            reader = csv.DictReader(f)
+            return any(row.get("date") == day and row.get("status") == "sent" for row in reader)
+    except Exception as exc:
+        print(f"WARN: could not read delivery log: {exc}", file=sys.stderr)
+        return False
+
+
+def lock_is_recent(now: datetime) -> bool:
+    if not LOCK.exists():
+        return False
+    try:
+        ts = datetime.fromisoformat(LOCK.read_text(encoding="utf-8").strip())
+    except Exception:
+        return False
+    return now - ts < LOCK_TTL
+
+
+def write_lock(now: datetime) -> None:
+    LOCK.parent.mkdir(parents=True, exist_ok=True)
+    LOCK.write_text(now.isoformat(), encoding="utf-8")
+
+
+def find_hermes() -> str:
+    candidates = [
+        os.environ.get("HERMES_EXE"),
+        "hermes",
+        str(Path.home() / "AppData" / "Local" / "Programs" / "Python" / "Python311" / "Scripts" / "hermes.exe"),
+        str(Path.home() / "AppData" / "Roaming" / "Python" / "Python311" / "Scripts" / "hermes.exe"),
+    ]
+    for c in candidates:
+        if not c:
+            continue
+        try:
+            subprocess.run([c, "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)
+            return c
+        except Exception:
+            continue
+    # Let PATH resolution produce a useful error.
+    return "hermes"
+
+
+def main() -> int:
+    now = datetime.now()
+    day = today_key(now)
+
+    if now.hour < PUBLISH_HOUR:
+        return 0
+    if already_sent(day):
+        return 0
+    if lock_is_recent(now):
+        return 0
+
+    write_lock(now)
+    hermes = find_hermes()
+    cmd = [hermes, "cron", "run", CRON_JOB_ID]
+    print(f"{now.isoformat()} triggering catch-up publish: {' '.join(cmd)}")
+    result = subprocess.run(cmd, cwd=str(ROOT), text=True, capture_output=True, timeout=300)
+    if result.stdout:
+        print(result.stdout)
+    if result.stderr:
+        print(result.stderr, file=sys.stderr)
+    return result.returncode
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
