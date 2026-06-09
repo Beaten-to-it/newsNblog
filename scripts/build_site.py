@@ -17,10 +17,13 @@ BOLD_RE = re.compile(r"\*\*([^*]+)\*\*")
 
 
 def inline_md(s: str) -> str:
+    # Escape ONCE up front. The regex passes below run on already-escaped text,
+    # so they must NOT re-escape their captured groups — doing so double-escapes
+    # (e.g. &quot; -> &amp;quot;) any " < > & inside **bold**, [links], `code`.
     s = html.escape(s)
-    s = LINK_RE.sub(lambda m: f'<a href="{html.escape(m.group(2), quote=True)}">{html.escape(m.group(1))}</a>', s)
-    s = CODE_RE.sub(lambda m: f'<code>{html.escape(m.group(1))}</code>', s)
-    s = BOLD_RE.sub(lambda m: f'<strong>{html.escape(m.group(1))}</strong>', s)
+    s = LINK_RE.sub(lambda m: f'<a href="{m.group(2)}">{m.group(1)}</a>', s)
+    s = CODE_RE.sub(lambda m: f'<code>{m.group(1)}</code>', s)
+    s = BOLD_RE.sub(lambda m: f'<strong>{m.group(1)}</strong>', s)
     return s
 
 
