@@ -1,30 +1,55 @@
 # Daily Automation
 
 매일 아침 7시에 AI Morning Radar를 생성하고 발행한다.
+**실행 엔진은 Claude Code(headless `claude -p`)이며, Hermes에 의존하지 않는다.**
+
+## 구조
+
+```
+Windows 예약작업 (07시 cron + 절전 깨움 + 15분 캐치업)
+  └─ scripts/daily_catchup_hidden.vbs   (콘솔 숨김 런처)
+       └─ scripts/daily_catchup.cmd     (py -3 로 실행, 로그 redirect)
+            └─ scripts/daily_catchup.py  (게이팅: 7시 이후·미발송·lock)
+                 └─ scripts/daily_run.py (결정론적 파이프라인)
+```
+
+`daily_run.py` 단계:
+
+1. **research** — `claude -p`(`prompts/daily_briefing.md` 프롬프트)로 최근 24시간 AI 뉴스를 조사해
+   `briefings/{date}.md` 작성 + `data/published_items.csv` 갱신. **LLM은 이 산출물만 만든다.**
+2. **render** — `scripts/render_briefing.py {date}` → `dist/email`, `dist/blog`
+3. **email** — `scripts/send_email.py {date}` → Gmail API로 수신자에게 발송
+4. **site** — `scripts/build_site.py` → `site/`
+5. **publish** — git commit + push → GitHub Actions가 Pages 배포
+6. **log** — `data/daily_delivery_log.csv`에 `status=sent` 기록 후 commit/push
+
+이메일·git·로깅 같은 외부 동작은 모두 `daily_run.py`에서 결정론적으로 처리한다.
+따라서 어떤 모델이 리서치를 하든 발송 파이프라인은 깨지지 않는다.
 
 ## 스케줄
 
 ```text
-0 7 * * *
+0 7 * * *   (로컬 시간 기준, Windows 예약작업)
 ```
 
-기준: 이 Windows/Hermes 환경의 로컬 시간.
+## 인증
 
-## 자동 작업 범위
+- **Claude:** 구독 OAuth(`~/.claude.json`)를 그대로 사용한다. headless `claude -p`가 자동 갱신.
+  무인 실행에서 재로그인이 필요해지면 한 번 `claude` 로그인하거나 `ANTHROPIC_API_KEY`로 전환한다.
+- **Gmail:** OAuth 사용자 토큰(`secrets/google_token.json`, `gmail.send` 스코프 + refresh_token)을 사용한다.
+  access token은 `send_email.py`가 자동 갱신해 다시 저장한다. 토큰 탐색 순서:
+  `$NEWSNBLOG_GOOGLE_TOKEN` → `secrets/google_token.json` → 레거시 Hermes 경로.
+- **GitHub:** Windows 자격 증명 관리자에 저장된 git 자격으로 push.
 
-매일 cron job은 다음을 수행한다.
+## Python 런타임
 
-1. `C:\Project\newsNblog`에서 작업한다.
-2. 최근 24시간/어제 기준 주요 AI 뉴스를 조사한다.
-3. X/Threads/GeekNews/공식 블로그/개발자 커뮤니티/주요 미디어를 반영한다.
-4. `data/published_items.csv`를 확인해 이미 다룬 뉴스는 반복하지 않는다.
-5. 새 브리핑을 `briefings/YYYY-MM-DD.md`에 작성한다.
-6. `data/published_items.csv`를 업데이트한다.
-7. `python scripts/render_briefing.py YYYY-MM-DD`를 실행해 메일/블로그 산출물을 만든다.
-8. Gmail API로 HTML 메일을 발송한다.
-9. GitHub에 commit/push한다.
-10. GitHub Actions Pages 배포가 성공했는지 확인한다.
-11. 모든 단계가 성공하면 `data/daily_delivery_log.csv`에 `status=sent` 성공 로그를 남긴다.
+`daily_catchup.cmd`는 `py -3`(시스템 Python313)로 실행한다 — Hermes venv가 아니라 실제 설치된
+Python을 쓰므로 Hermes를 제거해도 동작한다. 필요한 패키지:
+
+```text
+google-api-python-client
+google-auth
+```
 
 ## 발송 대상
 
@@ -32,6 +57,8 @@
 kimhyo75@gmail.com
 hyoya.kim@samsung.com
 ```
+
+`scripts/send_email.py`의 `RECIPIENTS` 상수에서 관리한다.
 
 ## 블로그
 
@@ -48,32 +75,40 @@ hyoya.kim@samsung.com
 - `AI UseCase` 섹션 포함
 - 독자용 본문에 `신뢰도`, `중복 여부`, 내부 발행 이력, 좋아요/폼 피드백을 노출하지 않음
 
-## 운영 주의
-
-- Google OAuth token과 GitHub gh 인증이 이 환경에 저장되어 있어야 한다.
-- Hermes cron은 gateway/scheduler가 실행 중이어야 동작한다.
-- 터미널을 닫아도 실행하려면 `hermes gateway install` / `hermes gateway start`로 서비스화되어 있어야 한다.
-
 ## 절전/깨움 보완 실행
 
-PC가 07:00에 절전 상태라면 정기 cron이 실행되지 않을 수 있다. 이를 보완하기 위해 Windows Scheduled Task 두 개를 추가한다.
+PC가 07:00에 절전 상태라면 정기 예약작업이 실행되지 않을 수 있다. 이를 보완하기 위해
+Windows 예약작업 두 개를 둔다.
 
 ```text
 newsNblog_Daily_Catchup          # 15분마다 체크
 newsNblog_Daily_Catchup_OnWake   # Windows 절전 해제 이벤트 직후 체크
 ```
 
-두 작업은 모두 아래 스크립트를 실행한다.
-
-```text
-C:\Project\newsNblog\scripts\daily_catchup.cmd
-C:\Project\newsNblog\scripts\daily_catchup.py
-```
-
-캐치업 스크립트는 다음 조건일 때만 Hermes cron job을 즉시 실행한다.
+캐치업(`daily_catchup.py`)은 다음 조건일 때만 `daily_run.py`를 실행한다.
 
 1. 현재 시간이 07:00 이후
 2. `data/daily_delivery_log.csv`에 오늘 `status=sent` 로그가 없음
 3. 최근 3시간 내 캐치업 lock이 없음
 
-따라서 절전에서 깨어났을 때 이미 오늘 발송이 끝났으면 아무것도 하지 않고, 아직 발송되지 않았다면 자동으로 보완 발행한다.
+## 수동 실행
+
+```bash
+# 전체(리서치 포함)
+py -3 scripts/daily_run.py --date 2026-06-09
+
+# 리서치는 사람이 하고 파이프라인만(브리핑이 이미 있을 때)
+py -3 scripts/daily_run.py --date 2026-06-09 --skip-research
+
+# 로컬 테스트(발송·push 없이)
+py -3 scripts/daily_run.py --date 2026-06-09 --skip-research --no-send --no-push
+
+# 메일 1통 테스트(본인에게만)
+py -3 scripts/send_email.py 2026-06-09 --to kimhyo75@gmail.com
+```
+
+## 레거시 (Hermes)
+
+이전에는 Hermes cron job(`3917d9f92061`)이 발행을 담당했으나, 게이트웨이 프로세스가 죽거나
+런타임(Codex) 토큰이 만료되면 무인 실행이 멈추는 문제가 있었다. 현재 이 job은 `paused` 상태이며
+실행 경로는 위 Claude 기반 파이프라인으로 대체되었다.

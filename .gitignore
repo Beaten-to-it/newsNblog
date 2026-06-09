@@ -8,6 +8,7 @@ Thumbs.db
 client_secret*.json
 google_client_secret.json
 google_token.json
+secrets/
 *.pem
 *.key
 

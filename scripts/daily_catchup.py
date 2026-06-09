@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 LOG = ROOT / "data" / "daily_delivery_log.csv"
 LOCK = ROOT / "data" / ".daily_catchup.lock"
-CRON_JOB_ID = "3917d9f92061"
+DAILY_RUN = ROOT / "scripts" / "daily_run.py"
 PUBLISH_HOUR = 7
 LOCK_TTL = timedelta(hours=3)
 
@@ -55,25 +55,6 @@ def write_lock(now: datetime) -> None:
     LOCK.write_text(now.isoformat(), encoding="utf-8")
 
 
-def find_hermes() -> str:
-    candidates = [
-        os.environ.get("HERMES_EXE"),
-        "hermes",
-        str(Path.home() / "AppData" / "Local" / "Programs" / "Python" / "Python311" / "Scripts" / "hermes.exe"),
-        str(Path.home() / "AppData" / "Roaming" / "Python" / "Python311" / "Scripts" / "hermes.exe"),
-    ]
-    for c in candidates:
-        if not c:
-            continue
-        try:
-            subprocess.run([c, "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)
-            return c
-        except Exception:
-            continue
-    # Let PATH resolution produce a useful error.
-    return "hermes"
-
-
 def main() -> int:
     now = datetime.now()
     day = today_key(now)
@@ -86,10 +67,9 @@ def main() -> int:
         return 0
 
     write_lock(now)
-    hermes = find_hermes()
-    cmd = [hermes, "cron", "run", CRON_JOB_ID]
+    cmd = [sys.executable, str(DAILY_RUN), "--date", day]
     print(f"{now.isoformat()} triggering catch-up publish: {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=str(ROOT), text=True, capture_output=True, timeout=300)
+    result = subprocess.run(cmd, cwd=str(ROOT), text=True, capture_output=True, timeout=1200)
     if result.stdout:
         print(result.stdout)
     if result.stderr:
