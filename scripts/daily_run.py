@@ -30,6 +30,15 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# Scheduled-task consoles on Windows default to cp949, which crashes on any
+# non-cp949 char (e.g. em-dash) the moment we print. Force utf-8 so logging a
+# command or the prompt never aborts the pipeline.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 ROOT = Path(__file__).resolve().parents[1]
 PY = sys.executable
 LOG = ROOT / "data" / "daily_delivery_log.csv"
@@ -38,7 +47,13 @@ PAGES_BASE = "https://beaten-to-it.github.io/newsNblog"
 
 
 def run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
-    print(f"$ {' '.join(str(c) for c in cmd)}", flush=True)
+    # Don't dump multi-KB prompt bodies into the log; show only short args.
+    shown = [c if len(str(c)) <= 120 else f"<{len(str(c))} chars>" for c in cmd]
+    print(f"$ {' '.join(str(c) for c in shown)}", flush=True)
+    # text=True decodes child output with the cp949 locale on Windows, which
+    # crashes the reader thread on utf-8/Korean bytes. Force utf-8 here too.
+    kw.setdefault("encoding", "utf-8")
+    kw.setdefault("errors", "replace")
     return subprocess.run(cmd, cwd=str(ROOT), text=True, **kw)
 
 
