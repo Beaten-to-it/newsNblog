@@ -101,7 +101,11 @@ def research(date: str) -> None:
         "--permission-mode", "bypassPermissions",
         "--add-dir", str(ROOT),
     ]
-    res = run(cmd, capture_output=True, timeout=900)
+    # Headless runs get a fresh session_id every time, so the global Stop hook
+    # (insight harvest) would fire its one-shot block on every nightly run.
+    # The hook reads this env var; a huge throttle disables it for this child only.
+    env = {**os.environ, "CLAUDE_INSIGHT_THROTTLE_MIN": "1000000"}
+    res = run(cmd, capture_output=True, timeout=900, env=env)
     if res.stdout:
         print(res.stdout[-2000:])
     if res.stderr:
