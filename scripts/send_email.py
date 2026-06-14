@@ -30,9 +30,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import tracks
 
-# Default recipients for the daily briefing (kept for reference; resolve_recipients uses track.recipients).
-RECIPIENTS = ["kimhyo75@gmail.com", "hyoya.kim@samsung.com"]
-
 
 def subject_for(track, date: str, briefing_text: str) -> str:
     first = next((l for l in briefing_text.splitlines() if l.strip()), "")
