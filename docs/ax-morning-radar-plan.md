@@ -910,6 +910,25 @@ grep -c "briefings/management" prompts/management_briefing.md
 ```
 Expected: `0`.
 
+- [ ] **Step 1b: AX 프롬프트에 dedup CSV append 지시 추가**
+
+The AI prompt instructs the model to append newly-covered items to `data/published_items.csv` (for cross-day dedup). The AX prompt currently has NO such instruction, so `data/published_items_ax.csv` would never be populated and AX would lose day-to-day dedup. Add an equivalent section to `prompts/management_briefing.md` (place it near "네가 할 일", mirroring the AI prompt's CSV section):
+
+```markdown
+## published_items_ax.csv append (중복 방지)
+
+이번에 새로 다룬 핵심 항목을 `data/published_items_ax.csv`에 append 한다.
+헤더: `canonical_key,first_published_date,title,url,source,section,tags,notes`
+- `canonical_key`: 소문자-하이픈 슬러그 + `-{DATE}` 접미사 (예: `salesforce-ai-layoffs-2026-06-14`)
+- `tags`는 세미콜론 구분, 콤마 포함 값은 큰따옴표로 감쌀 것.
+- 위 "이미 발행된 항목" 목록에 있는 건 반복하지 않는다.
+```
+
+Verify the CSV exists with a header (daily_run gating/published_keys read it):
+```bash
+[ -f data/published_items_ax.csv ] || printf 'canonical_key,first_published_date,title,url,source,section,tags,notes\n' > data/published_items_ax.csv
+```
+
 - [ ] **Step 2: 검증용 브리핑만 이관(백업·스파이크 변형 제외)**
 
 Run:
@@ -1013,3 +1032,12 @@ Expected: 전부 PASS.
 - **스펙 커버리지:** §6 표의 모든 행(프롬프트·폴더·CSV·사이트·URL·제목·수신자) → Task 1 설정 + Task 2~6 반영. 연구 렌즈 vault 접근 → Task 5 `research()` add_dirs. 트랙별 게이팅 → Task 5. CI 배포 → Task 6. 하위호환(AI 불변) → Task 2·4의 baseline diff 단계로 강제 검증.
 - **하위호환 리스크 1곳:** Task 4 Step 5에서 AI 루트 index의 hero 문구가 기존과 달라지면 diff 실패 → 그 경우 `tracks.py`에 hero 문구 필드를 추가해 AI엔 기존값을 박는 보정 지침을 같은 스텝에 명시함.
 - **인터페이스 일관성:** `Track.paths(date)` 키(`briefing/email_html/email_txt/blog_md`)를 render/send/daily_run에서 동일하게 사용. `--track` 기본값 `ai`로 모든 스크립트 통일.
+
+## 알려진 후속 (이번 범위 밖 — 배송 멱등성 강화)
+
+Task 5 코드리뷰에서 드러난, **기존 단일 트랙 파이프라인에도 있던** 선재(pre-existing) 약점. 이번 기능(트랙 추가)의 범위가 아니라 별도 하드닝 과제로 분리한다:
+- **이메일-후-로그 재발송 창:** 이메일은 `run_track`에서 발송되고 배송 로그는 `build_site` 이후에 기록됨. `build_site`가 실패하면 로그가 안 남아 다음 실행에서 재발송 위험. (이번에 git push 실패는 raise로 시끄럽게 처리하도록 보강함. build_site는 결정론적 로컬이라 실패 확률 낮음.)
+- **SystemExit를 트랙 실패 제어흐름으로 사용:** 회복 가능한 트랙 실패와 치명적 중단이 같은 예외 타입. 장기적으로 `TrackError` 분리 권장.
+- **research 중도 실패 시 `published_items*.csv` 더티:** 발송 안 됐는데 dedup 행이 남을 수 있음. dedup이 다음 실행에서 중복 억제하므로 무해하나 인지 필요.
+
+→ 위 3건은 두 트랙 공통의 "배송 멱등성" 리팩터로 묶어 후속 처리.
