@@ -124,6 +124,9 @@ def main() -> int:
     p = {k: ROOT / v for k, v in track.paths(args.date).items()}
 
     md = p["briefing"].read_text(encoding="utf-8")
+    # The research step appends a machine status marker (BRIEFING_WRITTEN: ...) as
+    # the last line; it is not reader content, so drop it before rendering/copying.
+    md = "\n".join(l for l in md.splitlines() if not l.startswith("BRIEFING_WRITTEN:")).rstrip() + "\n"
     first = next((l for l in md.splitlines() if l.strip()), "")
     title = first.lstrip("# ").strip() if first else f"{args.date} {track.name}"
 
