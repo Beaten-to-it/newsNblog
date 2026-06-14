@@ -27,8 +27,24 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# Default recipients for the daily briefing.
+sys.path.insert(0, str(ROOT / "scripts"))
+import tracks
+
+# Default recipients for the daily briefing (kept for reference; resolve_recipients uses track.recipients).
 RECIPIENTS = ["kimhyo75@gmail.com", "hyoya.kim@samsung.com"]
+
+
+def subject_for(track, date: str, briefing_text: str) -> str:
+    first = next((l for l in briefing_text.splitlines() if l.strip()), "")
+    if first:
+        return first.lstrip("# ").strip()
+    return f"{date} {track.name}"
+
+
+def resolve_recipients(track, override: str) -> list[str]:
+    if override:
+        return [r.strip() for r in override.split(",") if r.strip()]
+    return list(track.recipients)
 
 
 def _token_path() -> Path:
@@ -70,30 +86,29 @@ def _build_message(to_addr: str, subject: str, html_body: str, text_body: str) -
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Send AI Morning Radar email")
+    ap = argparse.ArgumentParser(description="Send a daily briefing email")
     ap.add_argument("date", help="YYYY-MM-DD")
+    ap.add_argument("--track", default="ai", choices=list(tracks.TRACKS))
     ap.add_argument("--to", default="", help="Comma-separated override recipients")
     ap.add_argument("--dry-run", action="store_true", help="Do not send; just report")
     args = ap.parse_args()
 
     date = args.date
-    html_path = ROOT / "dist" / "email" / f"{date}.html"
-    txt_path = ROOT / "dist" / "email" / f"{date}.txt"
-    brief_path = ROOT / "briefings" / f"{date}.md"
+    track = tracks.get_track(args.track)
+    p = track.paths(date)
+    html_path = ROOT / p["email_html"]
+    txt_path = ROOT / p["email_txt"]
+    brief_path = ROOT / p["briefing"]
 
     if not html_path.exists():
-        raise SystemExit(f"ERROR: {html_path} not found. Run render_briefing.py {date} first.")
+        raise SystemExit(f"ERROR: {html_path} not found. Run render_briefing.py --track {track.key} {date} first.")
 
     html_body = html_path.read_text(encoding="utf-8")
     text_body = txt_path.read_text(encoding="utf-8") if txt_path.exists() else ""
 
-    subject = f"{date} AI Morning Radar"
-    if brief_path.exists():
-        first = next((l for l in brief_path.read_text(encoding="utf-8").splitlines() if l.strip()), "")
-        if first:
-            subject = first.lstrip("# ").strip()
-
-    recipients = [r.strip() for r in args.to.split(",") if r.strip()] if args.to else RECIPIENTS
+    briefing_text = brief_path.read_text(encoding="utf-8") if brief_path.exists() else ""
+    subject = subject_for(track, date, briefing_text)
+    recipients = resolve_recipients(track, args.to)
 
     if args.dry_run:
         print(f"[dry-run] subject={subject!r}")
