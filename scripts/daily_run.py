@@ -135,8 +135,8 @@ def head_sha() -> str:
     return (r.stdout or "").strip()
 
 
-def run_track(track, date: str, *, skip_research: bool, no_send: bool) -> bool:
-    """Returns True if the track produced a briefing ready to publish."""
+def run_track(track, date: str, *, skip_research: bool, no_send: bool) -> None:
+    """Run research/verify/render/email for one track; raises SystemExit on failure."""
     if not skip_research:
         research(track, date)
     verify_briefing(track, date)
@@ -145,7 +145,6 @@ def run_track(track, date: str, *, skip_research: bool, no_send: bool) -> bool:
     if not no_send:
         if run([PY, "scripts/send_email.py", "--track", track.key, date]).returncode != 0:
             raise SystemExit(f"email step failed for track {track.key}")
-    return True
 
 
 def main() -> int:
@@ -163,14 +162,16 @@ def main() -> int:
 
     done = []   # tracks that produced publishable content this run
     for key in keys:
-        track = tracks.get_track(key)
-        if already_sent(track, date) and not args.force:
-            print(f"[{key}] {date} already sent; skipping.")
-            continue
         try:
-            if run_track(track, date, skip_research=args.skip_research, no_send=args.no_send):
-                done.append(track)
+            track = tracks.get_track(key)
+            if already_sent(track, date) and not args.force:
+                print(f"[{key}] {date} already sent; skipping.")
+                continue
+            run_track(track, date, skip_research=args.skip_research, no_send=args.no_send)
+            done.append(track)
         except SystemExit as e:
+            print(f"[{key}] FAILED: {e}", file=sys.stderr)
+        except Exception as e:
             print(f"[{key}] FAILED: {e}", file=sys.stderr)
 
     if not done:
@@ -185,8 +186,12 @@ def main() -> int:
         for t in done:
             add_paths += [t.briefings_dir + f"/{date}.md", t.published_csv]
         git("add", *add_paths)
-        git("commit", "-m", f"Publish {date} [{', '.join(t.key for t in done)}]")
-        git("push", "origin", "main")
+        c = git("commit", "-m", f"Publish {date} [{', '.join(t.key for t in done)}]")
+        if c.returncode != 0:
+            raise SystemExit(f"publish commit failed: {(c.stderr or c.stdout or '').strip()[:300]}")
+        pu = git("push", "origin", "main")
+        if pu.returncode != 0:
+            raise SystemExit(f"publish push failed: {(pu.stderr or pu.stdout or '').strip()[:300]}")
     sha = head_sha()
 
     completed = datetime.now().isoformat(timespec="seconds")
@@ -197,8 +202,12 @@ def main() -> int:
             f.write(f"{date},{status},,{sha},{pages_url},{completed},claude-driven pipeline\n")
     if not args.no_push:
         git("add", *[t.delivery_log for t in done])
-        git("commit", "-m", f"Log {date} delivery [{', '.join(t.key for t in done)}]")
-        git("push", "origin", "main")
+        c = git("commit", "-m", f"Log {date} delivery [{', '.join(t.key for t in done)}]")
+        if c.returncode != 0:
+            raise SystemExit(f"log commit failed: {(c.stderr or c.stdout or '').strip()[:300]}")
+        pu = git("push", "origin", "main")
+        if pu.returncode != 0:
+            raise SystemExit(f"log push failed: {(pu.stderr or pu.stdout or '').strip()[:300]}")
 
     for t in done:
         print(f"DONE {date} [{t.key}]: status={status} pages={PAGES_BASE}/{t.pages_path}posts/{date}.html")
