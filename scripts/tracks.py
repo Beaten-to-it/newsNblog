@@ -30,8 +30,8 @@ class Track:
     hero_eyebrow: str       # site landing hero eyebrow (kept exact for ai = byte-identical)
     hero_blurb: str         # site landing hero paragraph
     email_footer: str       # email footer line (kept exact for ai = byte-identical)
-    recipients: list[str] = field(default_factory=lambda: list(RECIPIENTS))
-    add_dirs: list[str] = field(default_factory=list)  # extra --add-dir for research
+    recipients: tuple[str, ...] = field(default_factory=lambda: tuple(RECIPIENTS))
+    add_dirs: tuple[str, ...] = ()  # extra --add-dir for research
 
     def paths(self, date: str) -> dict[str, Path]:
         return {
@@ -74,7 +74,7 @@ AX = Track(
     hero_eyebrow="Daily Briefing",
     hero_blurb="AI 전환·조직 변화·변화 저항을 축으로, 경영·MIS/DX를 곁들인 연구 밀착형 일일 브리핑입니다.",
     email_footer="Generated from newsNblog · AX 모닝 레이더",
-    add_dirs=["C:/Project/myOS"],
+    add_dirs=("C:/Project/myOS",),
 )
 
 TRACKS: dict[str, Track] = {AI.key: AI, AX.key: AX}

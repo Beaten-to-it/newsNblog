@@ -39,14 +39,14 @@ def test_ax_uses_isolated_subpaths():
 
 
 def test_recipients_same_two_for_both():
-    expected = ["kimhyo75@gmail.com", "hyoya.kim@samsung.com"]
+    expected = ("kimhyo75@gmail.com", "hyoya.kim@samsung.com")
     assert tracks.get_track("ai").recipients == expected
     assert tracks.get_track("ax").recipients == expected
 
 
 def test_only_ax_gets_vault_add_dir():
-    assert tracks.get_track("ai").add_dirs == []
-    assert tracks.get_track("ax").add_dirs == ["C:/Project/myOS"]
+    assert tracks.get_track("ai").add_dirs == ()
+    assert tracks.get_track("ax").add_dirs == ("C:/Project/myOS",)
 
 
 def test_ai_brand_strings_unchanged_backward_compat():
