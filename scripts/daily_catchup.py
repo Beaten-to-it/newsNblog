@@ -67,7 +67,9 @@ def main() -> int:
         return 0
 
     write_lock(now)
-    cmd = [sys.executable, str(DAILY_RUN), "--date", day]
+    # AX track is validated but not yet auto-published. Until a human flips this
+    # to "ai,ax" (AX go-live), the unattended scheduler runs the AI track only.
+    cmd = [sys.executable, str(DAILY_RUN), "--date", day, "--tracks", "ai"]
     print(f"{now.isoformat()} triggering catch-up publish: {' '.join(cmd)}")
     result = subprocess.run(cmd, cwd=str(ROOT), text=True, capture_output=True, timeout=1200)
     if result.stdout:
