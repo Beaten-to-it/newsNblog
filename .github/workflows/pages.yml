@@ -24,12 +24,19 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Render email/blog artifacts
+      - name: Render email/blog artifacts (all tracks)
         shell: bash
         run: |
           for f in briefings/*.md; do
+            [ -e "$f" ] || continue
             d="$(basename "$f" .md)"
             python scripts/render_briefing.py "$d"
+          done
+          for f in briefings/ax/*.md; do
+            [ -e "$f" ] || continue
+            b="$(basename "$f" .md)"
+            case "$b" in _*) continue;; esac   # skip spike/backup artifacts
+            python scripts/render_briefing.py --track ax "$b"
           done
       - name: Build static site
         run: python scripts/build_site.py
