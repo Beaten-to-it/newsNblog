@@ -28,7 +28,8 @@ def inline_md(s: str) -> str:
     return s
 
 
-def render_html(md: str, title: str) -> str:
+def render_html(md: str, title: str, *, brand: str = "AI Morning Radar",
+                tagline: str = "Generated from newsNblog · links point to original sources") -> str:
     body = []
     in_ul = False
 
@@ -99,10 +100,10 @@ def render_html(md: str, title: str) -> str:
 <body>
   <div class="wrap">
     <div class="card">
-      <div class="eyebrow">AI Morning Radar</div>
+      <div class="eyebrow">{html.escape(brand)}</div>
       {''.join(body)}
     </div>
-    <div class="footer">Generated from newsNblog · links point to original sources</div>
+    <div class="footer">{html.escape(tagline)}</div>
   </div>
 </body>
 </html>
@@ -110,27 +111,35 @@ def render_html(md: str, title: str) -> str:
 
 
 def main() -> int:
-    date = sys.argv[1] if len(sys.argv) > 1 else '2026-06-05'
-    src = ROOT / 'briefings' / f'{date}.md'
-    md = src.read_text(encoding='utf-8')
-    title = md.splitlines()[0].lstrip('# ').strip() if md.splitlines() else f'{date} AI Morning Radar'
+    import argparse
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import tracks
 
-    email_dir = ROOT / 'dist' / 'email'
-    blog_dir = ROOT / 'dist' / 'blog'
-    email_dir.mkdir(parents=True, exist_ok=True)
-    blog_dir.mkdir(parents=True, exist_ok=True)
+    ap = argparse.ArgumentParser(description="Render a briefing to email + blog")
+    ap.add_argument("--track", default="ai", choices=list(tracks.TRACKS))
+    ap.add_argument("date")
+    args = ap.parse_args()
 
-    html_out = email_dir / f'{date}.html'
-    txt_out = email_dir / f'{date}.txt'
-    blog_out = blog_dir / f'{date}.md'
+    track = tracks.get_track(args.track)
+    p = {k: ROOT / v for k, v in track.paths(args.date).items()}
 
-    html_out.write_text(render_html(md, title), encoding='utf-8')
-    txt_out.write_text(md, encoding='utf-8')
-    blog_out.write_text(md, encoding='utf-8')
+    md = p["briefing"].read_text(encoding="utf-8")
+    first = next((l for l in md.splitlines() if l.strip()), "")
+    title = first.lstrip("# ").strip() if first else f"{args.date} {track.name}"
 
-    print(f'html={html_out}')
-    print(f'text={txt_out}')
-    print(f'blog={blog_out}')
+    for out in (p["email_html"], p["email_txt"], p["blog_md"]):
+        out.parent.mkdir(parents=True, exist_ok=True)
+
+    p["email_html"].write_text(
+        render_html(md, title, brand=track.name, tagline=track.email_footer),
+        encoding="utf-8",
+    )
+    p["email_txt"].write_text(md, encoding="utf-8")
+    p["blog_md"].write_text(md, encoding="utf-8")
+
+    print(f"html={p['email_html']}")
+    print(f"text={p['email_txt']}")
+    print(f"blog={p['blog_md']}")
     return 0
 
 
