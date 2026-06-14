@@ -51,14 +51,30 @@
 
 스파이크 결과가 좋으면 → 파이프라인 구축 단계로 별도 plan 수립.
 
-## 6. 보류 결정 (콘텐츠 검증 후 확정)
+## 6. 파이프라인 설계 확정 (2026-06-14)
 
-- 이메일 수신자(본인만 vs AI 트랙과 동일 2인)·발송 시각(같은 7시 vs 시차)
-- 사이트 레이아웃: 한 사이트 두 섹션/탭 vs 분리된 인덱스
-- 스크립트 트랙 파라미터화 방식(render/send/build를 track 인자로) — 중복 vs 재사용
-- 트랙별 `published_items` 중복방지 분리(`data/published_items_management.csv` 등)
-- 스케줄/캐치업: 같은 일일 스케줄에 묶을지, `claude -p` 1회 호출에서 두 트랙 동시 생성할지
-- 최종 트랙명
+**트랙명:** AX 모닝 레이더 (AX = AI Transformation). 트랙 키 = `ax`.
+
+기존 AI 트랙은 **경로·URL·이메일 전부 불변**(하위호환). AX만 새 경로 → 충돌 0.
+
+| 요소 | AI 트랙 (기존, 불변) | AX 트랙 (신규) |
+|---|---|---|
+| 프롬프트 | `prompts/daily_briefing.md` | `prompts/management_briefing.md` |
+| 브리핑 폴더 | `briefings/` | `briefings/ax/` |
+| 중복방지 DB | `data/published_items.csv` | `data/published_items_ax.csv` |
+| 사이트 | `…/newsNblog/` (루트) | `…/newsNblog/ax/` (독립 랜딩·아카이브·브랜드) |
+| 글 URL | `…/posts/{날짜}.html` (유지) | `…/ax/posts/{날짜}.html` |
+| 이메일 제목 | `{날짜} AI Morning Radar` | `{날짜} AX 모닝 레이더` |
+| 수신자 | kimhyo75 + hyoya.kim@samsung | **동일 2인** |
+
+**구현 방침:**
+- `render_briefing.py`·`send_email.py`·`build_site.py`를 **track 인자로 파라미터화**. AI는 레거시(비하위경로) 그대로, AX만 하위경로 → 기존 동작 보존 + 코드 재사용.
+- `daily_run.py`가 **두 트랙 순차 처리**. AX 리서치는 `claude -p`에 `--add-dir C:\Project\myOS`(vault)로 연구 렌즈 가동. 리서치는 **트랙별 2회 분리**(격리·디버깅 우선; 사용량 부담 시 통합은 후순위 옵션).
+- 흐름: (트랙별) 리서치→렌더→이메일 → (공통) 사이트 빌드(둘 다)→1회 push → **트랙별 발송 로그**.
+- **발송/캐치업 게이팅을 트랙별로** 분리 — 한 트랙 실패가 다른 트랙을 막지 않게(2026-06-13식 단일 실패점 방지). 발송 로그에 track 컬럼 추가 또는 트랙별 로그.
+- 새 예약작업 없음(기존 일일 스케줄·캐치업 재사용). 검증 종료 후 일회성 `newsNblog_MgmtSpike_OneShot` 제거.
+
+**정리 대상(구현 시):** 스파이크 잔여물 — `briefings/management/`(→ `briefings/ax/`로 정리), `scripts/_spike_management_run.py`, `data/_spike_management*.log`.
 
 ## 7. 스파이크 결과 (2026-06-14, 2회 실행)
 
