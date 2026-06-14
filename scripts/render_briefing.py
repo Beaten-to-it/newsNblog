@@ -1,16 +1,20 @@
 #!/usr/bin/env python
-"""Render AI Morning Radar markdown to simple HTML email and blog markdown.
+"""Render a daily briefing (any track) to simple HTML email and blog markdown.
 
 No external dependencies. This is intentionally small for v0.
 """
 from __future__ import annotations
 
+import argparse
 import html
 import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+sys.path.insert(0, str(ROOT / "scripts"))
+import tracks
 
 LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 CODE_RE = re.compile(r"`([^`]+)`")
@@ -111,10 +115,6 @@ def render_html(md: str, title: str, *, brand: str = "AI Morning Radar",
 
 
 def main() -> int:
-    import argparse
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    import tracks
-
     ap = argparse.ArgumentParser(description="Render a briefing to email + blog")
     ap.add_argument("--track", default="ai", choices=list(tracks.TRACKS))
     ap.add_argument("date")
