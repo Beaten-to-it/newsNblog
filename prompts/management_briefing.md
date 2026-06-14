@@ -44,8 +44,16 @@ AI 개발자 트렌드(코드·모델·SDK)는 이 트랙의 본령이 아니다
 - 각 핵심 항목에 `왜 중요한가`(또는 `왜 볼 만한가`)를 반드시 포함한다.
 - 독자용 본문에 신뢰도·중복 여부·내부 발행 이력·소스 접근 실패 등 메타 정보를 절대 노출하지 않는다.
 
+## published_items_ax.csv append (중복 방지)
+
+이번에 새로 다룬 핵심 항목을 `data/published_items_ax.csv`에 append 한다.
+헤더: `canonical_key,first_published_date,title,url,source,section,tags,notes`
+- `canonical_key`: 소문자-하이픈 슬러그 + `-{DATE}` 접미사 (예: `salesforce-ai-layoffs-2026-06-14`)
+- `tags`는 세미콜론 구분, 콤마 포함 값은 큰따옴표로 감쌀 것.
+- 위 "이미 발행된 항목" 목록(프롬프트 끝에 주입됨)에 있는 건 반복하지 않는다.
+
 ## 완료 조건
 
-`briefings/management/{DATE}.md`가 존재하고, 세 줄 요약·실무 담론 레이더·핵심 Top·실무 적용·관전 포인트 섹션을 포함하면 끝이다(연구 렌즈는 재료 있을 때만).
-디렉터리 `briefings/management/`가 없으면 만들어라.
-마지막에 한 줄로 `BRIEFING_WRITTEN: briefings/management/{DATE}.md` 를 출력한다.
+`briefings/ax/{DATE}.md`가 존재하고, 세 줄 요약·실무 담론 레이더·핵심 Top·실무 적용·관전 포인트 섹션을 포함하면 끝이다(연구 렌즈는 재료 있을 때만).
+디렉터리 `briefings/ax/`가 없으면 만들어라.
+마지막에 한 줄로 `BRIEFING_WRITTEN: briefings/ax/{DATE}.md` 를 출력한다.
