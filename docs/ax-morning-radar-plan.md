@@ -948,21 +948,43 @@ git commit -m "Point AX prompt at briefings/ax/; migrate validated briefing"
 
 ---
 
-## Task 8: 스파이크 잔여물·일회성 작업 정리
+## Task 8: AX 무인 발송 보류 게이트 + 스파이크 정리
 
-**Files:**
-- Delete: `scripts/_spike_management_run.py`, `data/_spike_management*.log`, `briefings/management/` (백업 포함)
+> 중요: `daily_run.py` 기본값이 두 트랙이 되었으므로, **무인 스케줄러(`daily_catchup.py`)가 내일 아침 AX를 자동 발송**한다. Task 9(첫 실발송)를 새 뉴스일 검토 후로 보류하기로 했으므로, **스케줄러는 당분간 `ai`만** 돌리고, 내일 아침엔 **검토용 AX 콘텐츠만(발송 X) 생성**한다. 사람이 검토·승인하면 그때 `ai,ax`로 전환(= AX 정식 go-live).
 
-- [ ] **Step 1: 일회성 예약 작업 제거**
+**Files:** Modify `scripts/daily_catchup.py`; repoint one-shot task; delete spike artifacts.
 
-Run (PowerShell):
-```powershell
-Unregister-ScheduledTask -TaskName newsNblog_MgmtSpike_OneShot -Confirm:$false -ErrorAction SilentlyContinue
-Get-ScheduledTask -TaskName newsNblog_MgmtSpike_OneShot -ErrorAction SilentlyContinue
+- [ ] **Step 1: 무인 스케줄러를 `ai`만으로 (AX go-live 게이트)**
+
+In `scripts/daily_catchup.py`, change the invocation (line ~70) from:
+```python
+    cmd = [sys.executable, str(DAILY_RUN), "--date", day]
 ```
-Expected: 두 번째 명령이 아무것도 출력하지 않음(작업 삭제됨).
+to:
+```python
+    # AX track is validated but not yet auto-published. Until a human flips this
+    # to "ai,ax" (AX go-live), the unattended scheduler runs the AI track only.
+    cmd = [sys.executable, str(DAILY_RUN), "--date", day, "--tracks", "ai"]
+```
+This keeps tomorrow's unattended run identical to today's (AI only). No AX email/publish happens unattended.
 
-- [ ] **Step 2: 스파이크 파일 삭제**
+- [ ] **Step 2: 일회성 작업을 "검토용 AX 생성(발송 X)"으로 repoint**
+
+The one-shot `newsNblog_MgmtSpike_OneShot` currently runs the throwaway spike script. Repoint it to generate tomorrow's fresh AX briefing with the REAL pipeline but NO send/push (for human review):
+
+```powershell
+$at = (Get-Date).Date.AddDays(1).AddHours(7).AddMinutes(15)
+$action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument '/c py -3 scripts\daily_run.py --date 2026-06-15 --tracks ax --no-send --no-push > data\_ax_review_0615.log 2>&1' -WorkingDirectory "C:\Project\newsNblog"
+$trigger = New-ScheduledTaskTrigger -Once -At $at
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+$principal = New-ScheduledTaskPrincipal -UserId "$env:USERNAME" -LogonType Interactive -RunLevel Limited
+Unregister-ScheduledTask -TaskName "newsNblog_MgmtSpike_OneShot" -Confirm:$false -ErrorAction SilentlyContinue
+Register-ScheduledTask -TaskName "newsNblog_AX_ReviewGen" -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description "One-shot: generate (no send) 2026-06-15 AX briefing for human review." | Out-Null
+(Get-ScheduledTask -TaskName newsNblog_AX_ReviewGen | Get-ScheduledTaskInfo).NextRunTime
+```
+Expected: prints tomorrow 07:15 next-run.
+
+- [ ] **Step 3: 스파이크 파일 삭제**
 
 Run:
 ```bash
@@ -970,14 +992,17 @@ rm -f scripts/_spike_management_run.py data/_spike_management*.log
 rm -rf briefings/management
 ls briefings/ | grep -c management || echo "management gone"
 ```
-Expected: `management gone`.
+Expected: `management gone`. (Note: `briefings/ax/_*` backup variants from render smokes can also be removed — `rm -f briefings/ax/_*.md` — they are untracked and never published.)
 
-- [ ] **Step 3: 커밋**
+- [ ] **Step 4: 커밋**
 
 ```bash
-git add -A
-git commit -m "Remove management-track spike artifacts (superseded by ax pipeline)"
+git add scripts/daily_catchup.py
+git commit -m "Hold AX off unattended scheduler (ai-only) until reviewed; clean spike artifacts"
 ```
+(Only `daily_catchup.py` is tracked; the deleted spike files were untracked.)
+
+**Go-live (LATER, after human reviews fresh AX content):** flip `daily_catchup.py` back to `--tracks ai,ax` (or remove the `--tracks` arg to use the default), remove `newsNblog_AX_ReviewGen`, and run the first real AX publish (Task 9).
 
 ---
 
