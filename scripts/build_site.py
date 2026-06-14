@@ -147,7 +147,7 @@ def page(
 """
 
 
-def build_track(track) -> list:
+def build_track(track: "tracks.Track") -> list[Path]:
     posts_dir = ROOT / track.blog_dir
     site_dir = ROOT / track.site_dir
     site_posts = site_dir / "posts"
@@ -185,7 +185,7 @@ def build_track(track) -> list:
 </section>
 """
     (site_dir / "index.html").write_text(
-        page(track.name, index_content, brand=track.name, tagline=track.tagline),
+        page(track.name, index_content, brand=track.name, tagline=track.tagline, description=track.name),
         encoding="utf-8",
     )
     (site_dir / "assets" / "style.css").write_text(CSS, encoding="utf-8")
@@ -194,14 +194,16 @@ def build_track(track) -> list:
 
 def main() -> int:
     written = []
+    built = 0
     for key in tracks.ORDER:
         track = tracks.get_track(key)
         if not (ROOT / track.blog_dir).exists():
             continue  # track has no rendered posts yet
         written += build_track(track)
+        built += 1
     for path in written:
         print(path.relative_to(ROOT))
-    print(f"built {len(written)} files across {len(tracks.ORDER)} tracks")
+    print(f"built {len(written)} files across {built} tracks")
     return 0
 
 
