@@ -47,12 +47,27 @@ code { background:#f2f4f7; border-radius:6px; padding:1px 5px; font-size:.92em; 
 """.strip() + "\n"
 
 
+# Allow only safe URL schemes in rendered links. html.escape() does NOT neutralize
+# javascript:/data:/vbscript: — the scheme is plain text and browsers decode any
+# entities in href before dispatching it, so a [text](javascript:...) link from a
+# (possibly hostile) fetched source would be a clickable XSS payload. Whitelist
+# http/https/mailto and scheme-less (relative/anchor) URLs; neutralize the rest.
+_SCHEME_RE = re.compile(r"^\s*([a-zA-Z][a-zA-Z0-9+.\-]*)\s*:")
+
+
+def _safe_href(url: str) -> str:
+    m = _SCHEME_RE.match(url)
+    if m and m.group(1).lower() not in ("http", "https", "mailto"):
+        return "#"
+    return url
+
+
 def inline_md(s: str) -> str:
     # Escape ONCE up front. The regex passes below run on already-escaped text,
     # so they must NOT re-escape their captured groups — doing so double-escapes
     # (e.g. &quot; -> &amp;quot;) any " < > & inside **bold**, [links], `code`.
     s = html.escape(s)
-    s = LINK_RE.sub(lambda m: f'<a href="{m.group(2)}">{m.group(1)}</a>', s)
+    s = LINK_RE.sub(lambda m: f'<a href="{_safe_href(m.group(2))}">{m.group(1)}</a>', s)
     s = CODE_RE.sub(lambda m: f'<code>{m.group(1)}</code>', s)
     s = BOLD_RE.sub(lambda m: f'<strong>{m.group(1)}</strong>', s)
     return s
@@ -193,8 +208,8 @@ def build_track(track: "tracks.Track") -> list[Path]:
 
     # Translation pages: same template/CSS as posts, with a back-link to the post.
     written_xlate: list[Path] = []
+    site_xlate = site_dir / "translated"
     if translations:
-        site_xlate = site_dir / "translated"
         site_xlate.mkdir(parents=True, exist_ok=True)
         for date, tmd in sorted(translations.items(), reverse=True):
             lines = tmd.splitlines()
@@ -209,6 +224,13 @@ def build_track(track: "tracks.Track") -> list[Path]:
                 encoding="utf-8",
             )
             written_xlate.append(out)
+    # Drop stale translated pages whose source md no longer exists, so a removed
+    # translation can't leave an orphan in the local site/ tree. (CI builds from a
+    # clean checkout, so production is unaffected either way.)
+    if site_xlate.exists():
+        for hp in site_xlate.glob("*.html"):
+            if hp.stem not in translations:
+                hp.unlink()
 
     items = "\n".join(
         f'<li><a href="{href}">{html.escape(title)}</a><time>{date}</time></li>'

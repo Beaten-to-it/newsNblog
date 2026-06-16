@@ -119,7 +119,6 @@ def translate(track, date: str) -> None:
     """
     briefing = ROOT / track.paths(date)["briefing"]
     out = ROOT / track.translated_md(date)
-    out.parent.mkdir(parents=True, exist_ok=True)
     prompt = (
         "너는 한국어 뉴스 블로그의 번역 도우미다.\n"
         f"먼저 이 브리핑 파일을 읽어라: {briefing.as_posix()}\n\n"
@@ -136,6 +135,7 @@ def translate(track, date: str) -> None:
         "- 원문에 없는 사실을 지어내지 마라. 페이월·차단으로 본문을 못 읽으면 그 항목에 "
         "'(원문 접근 제한: …)'이라 적고 브리핑에 이미 있는 정보 범위에서만 정리한다.\n"
         "- 숫자·고유명사·인용은 원문 그대로. 추정·과장 금지.\n"
+        "- 모든 링크 URL은 반드시 원문 기사의 http(s) 주소만 사용하라. javascript:·data: 등 다른 스킴 금지.\n"
         f"- 결과를 '{out.as_posix()}' 파일에 써라(기존 내용은 덮어쓴다).\n"
         "- 외국어 소스 항목이 하나도 없으면 파일에 정확히 'NO_FOREIGN_SOURCES' 한 줄만 써라.\n"
         "끝나면 'TRANSLATED_WRITTEN' 한 줄을 출력하라.\n"
@@ -145,26 +145,30 @@ def translate(track, date: str) -> None:
     # Headless Claude gets a fresh session every run; a huge throttle disables the
     # global insight-harvest Stop hook for this child only.
     env = {**os.environ, "CLAUDE_INSIGHT_THROTTLE_MIN": "1000000"}
+    # Guard the ENTIRE body: no failure (subprocess launch/timeout, mkdir, decode,
+    # unlink, write) may propagate. If it did, run_track would raise and the track
+    # would be dropped from `done` AFTER its email already went out — re-sending a
+    # duplicate on the next run. Translation is strictly best-effort.
     try:
+        out.parent.mkdir(parents=True, exist_ok=True)
         res = run(cmd, capture_output=True, timeout=1800, env=env)
-    except Exception as e:  # launch failure / timeout — best-effort, swallow
-        print(f"[{track.key}] translate skipped ({e})", file=sys.stderr)
-        return
-    if res.stdout:
-        print(res.stdout[-1500:])
-    if res.stderr:
-        print(res.stderr[-800:], file=sys.stderr)
-    txt = out.read_text(encoding="utf-8").strip() if out.exists() else ""
-    if res.returncode != 0 or not txt or txt == "NO_FOREIGN_SOURCES":
-        if out.exists():
-            out.unlink()  # no broken button/page
-        why = (f"claude exit {res.returncode}" if res.returncode != 0
-               else "no foreign sources" if txt == "NO_FOREIGN_SOURCES" else "empty output")
-        print(f"[{track.key}] no translation page for {date} ({why}).")
-        return
-    cleaned = "\n".join(l for l in txt.splitlines() if l.strip() != "TRANSLATED_WRITTEN").rstrip() + "\n"
-    out.write_text(cleaned, encoding="utf-8")
-    print(f"[{track.key}] translation page written: {out}")
+        if res.stdout:
+            print(res.stdout[-1500:])
+        if res.stderr:
+            print(res.stderr[-800:], file=sys.stderr)
+        txt = out.read_text(encoding="utf-8", errors="replace").strip() if out.exists() else ""
+        if res.returncode != 0 or not txt or txt == "NO_FOREIGN_SOURCES":
+            if out.exists():
+                out.unlink()  # no broken button/page
+            why = (f"claude exit {res.returncode}" if res.returncode != 0
+                   else "no foreign sources" if txt == "NO_FOREIGN_SOURCES" else "empty output")
+            print(f"[{track.key}] no translation page for {date} ({why}).")
+            return
+        cleaned = "\n".join(l for l in txt.splitlines() if l.strip() != "TRANSLATED_WRITTEN").rstrip() + "\n"
+        out.write_text(cleaned, encoding="utf-8")
+        print(f"[{track.key}] translation page written: {out}")
+    except Exception as e:  # best-effort: never block delivery
+        print(f"[{track.key}] translate skipped/failed for {date} ({e})", file=sys.stderr)
 
 
 def research(track, date: str) -> None:
@@ -229,9 +233,10 @@ def run_track(track, date: str, *, skip_research: bool, no_send: bool) -> None:
     if not no_send:
         if run([PY, "scripts/send_email.py", "--track", track.key, date]).returncode != 0:
             raise SystemExit(f"email step failed for track {track.key}")
-    # Best-effort Korean translation page for foreign-sourced items. Runs after the
-    # email (never blocks/delays delivery) and never raises.
-    translate(track, date)
+        # Best-effort Korean translation page for foreign-sourced items. Runs after
+        # the email (never blocks/delays delivery) and never raises. Skipped under
+        # --no-send so a "local dry test" stays fast (no ~30-min Claude subprocess).
+        translate(track, date)
 
 
 def main() -> int:
@@ -272,8 +277,14 @@ def main() -> int:
         add_paths = []
         for t in done:
             add_paths += [t.briefings_dir + f"/{date}.md", t.published_csv]
-            if (ROOT / t.translated_md(date)).exists():
-                add_paths.append(str(t.translated_md(date)))
+            tmd = t.translated_md(date)
+            if (ROOT / tmd).exists():
+                add_paths.append(str(tmd))
+            else:
+                # Translation removed this run (no foreign sources / failure). Stage
+                # the deletion so a previously committed page can't linger on the
+                # deployed site. --ignore-unmatch makes it a no-op if never tracked.
+                git("rm", "--ignore-unmatch", "-q", str(tmd))
         git("add", *add_paths)
         c = git("commit", "-m", f"Publish {date} [{', '.join(t.key for t in done)}]")
         if c.returncode != 0:

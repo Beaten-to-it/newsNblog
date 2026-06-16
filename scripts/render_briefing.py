@@ -21,12 +21,26 @@ CODE_RE = re.compile(r"`([^`]+)`")
 BOLD_RE = re.compile(r"\*\*([^*]+)\*\*")
 
 
+# Allow only safe URL schemes in rendered links. html.escape() does NOT neutralize
+# javascript:/data:/vbscript: — the scheme is plain text and browsers decode any
+# entities in href before dispatching it, so a [text](javascript:...) link would be
+# a clickable XSS payload. Whitelist http/https/mailto and scheme-less URLs.
+_SCHEME_RE = re.compile(r"^\s*([a-zA-Z][a-zA-Z0-9+.\-]*)\s*:")
+
+
+def _safe_href(url: str) -> str:
+    m = _SCHEME_RE.match(url)
+    if m and m.group(1).lower() not in ("http", "https", "mailto"):
+        return "#"
+    return url
+
+
 def inline_md(s: str) -> str:
     # Escape ONCE up front. The regex passes below run on already-escaped text,
     # so they must NOT re-escape their captured groups — doing so double-escapes
     # (e.g. &quot; -> &amp;quot;) any " < > & inside **bold**, [links], `code`.
     s = html.escape(s)
-    s = LINK_RE.sub(lambda m: f'<a href="{m.group(2)}">{m.group(1)}</a>', s)
+    s = LINK_RE.sub(lambda m: f'<a href="{_safe_href(m.group(2))}">{m.group(1)}</a>', s)
     s = CODE_RE.sub(lambda m: f'<code>{m.group(1)}</code>', s)
     s = BOLD_RE.sub(lambda m: f'<strong>{m.group(1)}</strong>', s)
     return s
