@@ -2,7 +2,7 @@
 """Daily pipeline orchestrator — processes ALL configured tracks (ai, ax, …).
 
 Flow per track:
-  1. (research)   claude -p with track's prompt -> briefings/{track}/{date}.md
+  1. (research)   codex exec with track's prompt -> briefings/{track}/{date}.md
                   + track's published_csv update   (skip with --skip-research)
   2. (render)     scripts/render_briefing.py --track {key} {date}
   3. (email)      scripts/send_email.py --track {key} {date}
@@ -82,38 +82,50 @@ def published_keys(track) -> str:
     return "\n".join(lines[-40:]) if lines else "(none)"
 
 
-def find_claude() -> str:
+def find_codex() -> str:
     for c in (
-        os.environ.get("CLAUDE_EXE"),
-        shutil.which("claude"),
-        shutil.which("claude.cmd"),
-        str(Path.home() / "AppData" / "Roaming" / "npm" / "claude.cmd"),
-        str(Path.home() / ".local" / "bin" / "claude.exe"),
+        os.environ.get("CODEX_EXE"),
+        shutil.which("codex"),
+        shutil.which("codex.cmd"),
+        str(Path.home() / "AppData" / "Roaming" / "npm" / "codex.cmd"),
+        str(Path.home() / ".local" / "bin" / "codex"),
     ):
         if c and Path(c).exists():
             return c
-    return "claude"
+    return "codex"
 
 
 def research(track, date: str) -> None:
     prompt = (ROOT / track.prompt).read_text(encoding="utf-8").replace("{DATE}", date)
     prompt += f"\n\n## 이미 발행된 항목 (반복 금지)\n{published_keys(track)}\n"
     prompt += f"\n오늘 날짜: {date}\n"
-    cmd = [find_claude(), "-p", prompt, "--permission-mode", "bypassPermissions",
-           "--add-dir", str(ROOT)]
+    # Headless Codex run — the non-interactive analogue of `claude -p`.
+    #   exec                                       : non-interactive subcommand.
+    #   --dangerously-bypass-approvals-and-sandbox : unattended; Windows has no
+    #       OS-level sandbox to confine writes, so this is the practical
+    #       equivalent of claude's --permission-mode bypassPermissions.
+    #   --skip-git-repo-check                      : don't refuse to run in/around git.
+    #   -c tools.web_search=true                   : enable live web search — the
+    #       whole point of a news briefing; OFF by default in `codex exec`
+    #       (the top-level `--search` flag is not accepted by the exec subcommand).
+    #   -C ROOT                                    : working root (writes land here).
+    #   --add-dir <dir> (AX track)                 : vault access for the research lens.
+    #   -  (final arg)                             : read the prompt from STDIN.
+    # The prompt is multi-KB; passing it as an argv element blows cmd.exe's
+    # ~8191-char command-line limit through the npm `codex.cmd` batch shim
+    # ("명령줄이 너무 깁니다"). stdin has no such limit, so we pipe it instead.
+    cmd = [find_codex(), "exec", "--dangerously-bypass-approvals-and-sandbox",
+           "--skip-git-repo-check", "-c", "tools.web_search=true", "-C", str(ROOT)]
     for d in track.add_dirs:
         cmd += ["--add-dir", d]
-    # Headless runs get a fresh session_id every time, so the global Stop hook
-    # (insight harvest) would fire its one-shot block on every nightly run.
-    # The hook reads this env var; a huge throttle disables it for this child only.
-    env = {**os.environ, "CLAUDE_INSIGHT_THROTTLE_MIN": "1000000"}
-    res = run(cmd, capture_output=True, timeout=1500, env=env)
+    cmd += ["-"]
+    res = run(cmd, capture_output=True, timeout=1500, input=prompt)
     if res.stdout:
         print(res.stdout[-2000:])
     if res.stderr:
         print(res.stderr[-1000:], file=sys.stderr)
     if res.returncode != 0:
-        raise SystemExit(f"research step failed for track {track.key} (claude exit {res.returncode})")
+        raise SystemExit(f"research step failed for track {track.key} (codex exit {res.returncode})")
 
 
 def verify_briefing(track, date: str) -> Path:
@@ -199,7 +211,7 @@ def main() -> int:
     for t in done:
         pages_url = f"{PAGES_BASE}/{t.pages_path}posts/{date}.html"
         with (ROOT / t.delivery_log).open("a", encoding="utf-8", newline="") as f:
-            f.write(f"{date},{status},,{sha},{pages_url},{completed},claude-driven pipeline\n")
+            f.write(f"{date},{status},,{sha},{pages_url},{completed},codex-driven pipeline\n")
     if not args.no_push:
         git("add", *[t.delivery_log for t in done])
         c = git("commit", "-m", f"Log {date} delivery [{', '.join(t.key for t in done)}]")
