@@ -45,8 +45,6 @@ PY = sys.executable
 sys.path.insert(0, str(ROOT / "scripts"))
 import tracks
 
-PAGES_BASE = "https://beaten-to-it.github.io/newsNblog"
-
 
 def run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
     # Don't dump multi-KB prompt bodies into the log; show only short args.
@@ -209,7 +207,7 @@ def main() -> int:
     completed = datetime.now().isoformat(timespec="seconds")
     status = "rendered" if (args.no_send or args.no_push) else "sent"
     for t in done:
-        pages_url = f"{PAGES_BASE}/{t.pages_path}posts/{date}.html"
+        pages_url = t.pages_url(date)
         with (ROOT / t.delivery_log).open("a", encoding="utf-8", newline="") as f:
             f.write(f"{date},{status},,{sha},{pages_url},{completed},codex-driven pipeline\n")
     if not args.no_push:
@@ -222,7 +220,7 @@ def main() -> int:
             raise SystemExit(f"log push failed: {(pu.stderr or pu.stdout or '').strip()[:300]}")
 
     for t in done:
-        print(f"DONE {date} [{t.key}]: status={status} pages={PAGES_BASE}/{t.pages_path}posts/{date}.html")
+        print(f"DONE {date} [{t.key}]: status={status} pages={t.pages_url(date)}")
     return 0
 
 

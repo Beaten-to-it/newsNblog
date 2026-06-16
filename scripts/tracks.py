@@ -13,6 +13,10 @@ from pathlib import Path
 
 RECIPIENTS = ["kimhyo75@gmail.com", "hyoya.kim@samsung.com"]
 
+# Base URL of the GitHub Pages site. Single source of truth — daily_run (delivery
+# log) and render_briefing (email "open in browser" link) both derive from it.
+PAGES_BASE = "https://beaten-to-it.github.io/newsNblog"
+
 
 @dataclass(frozen=True)
 class Track:
@@ -40,6 +44,10 @@ class Track:
             "email_txt": Path(self.email_dir) / f"{date}.txt",
             "blog_md": Path(self.blog_dir) / f"{date}.md",
         }
+
+    def pages_url(self, date: str) -> str:
+        """Public GitHub Pages URL for this track's {date} post."""
+        return f"{PAGES_BASE}/{self.pages_path}posts/{date}.html"
 
 
 AI = Track(

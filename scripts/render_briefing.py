@@ -33,7 +33,8 @@ def inline_md(s: str) -> str:
 
 
 def render_html(md: str, title: str, *, brand: str = "AI Morning Radar",
-                tagline: str = "Generated from newsNblog · links point to original sources") -> str:
+                tagline: str = "Generated from newsNblog · links point to original sources",
+                web_url: str = "") -> str:
     body = []
     in_ul = False
 
@@ -75,6 +76,18 @@ def render_html(md: str, title: str, *, brand: str = "AI Morning Radar",
             body.append(f'<p>{inline_md(line.strip())}</p>')
     close_ul()
 
+    # A prominent, tappable link to this day's blog page at the very end of the
+    # email card. Inline styles only (email clients strip <style>-scoped rules).
+    web_link = ""
+    if web_url:
+        web_link = (
+            '<p style="margin:30px 0 0;padding-top:20px;border-top:1px solid #edf0f6;text-align:center;">'
+            f'<a href="{html.escape(web_url, quote=True)}" '
+            'style="display:inline-block;background:#2563eb;color:#ffffff;font-weight:700;'
+            'text-decoration:none;padding:13px 24px;border-radius:10px;">📖 오늘 브리핑 웹페이지에서 보기</a>'
+            '</p>'
+        )
+
     return f'''<!doctype html>
 <html lang="ko">
 <head>
@@ -106,6 +119,7 @@ def render_html(md: str, title: str, *, brand: str = "AI Morning Radar",
     <div class="card">
       <div class="eyebrow">{html.escape(brand)}</div>
       {''.join(body)}
+      {web_link}
     </div>
     <div class="footer">{html.escape(tagline)}</div>
   </div>
@@ -133,11 +147,15 @@ def main() -> int:
     for out in (p["email_html"], p["email_txt"], p["blog_md"]):
         out.parent.mkdir(parents=True, exist_ok=True)
 
+    web_url = track.pages_url(args.date)
+
     p["email_html"].write_text(
-        render_html(md, title, brand=track.name, tagline=track.email_footer),
+        render_html(md, title, brand=track.name, tagline=track.email_footer, web_url=web_url),
         encoding="utf-8",
     )
-    p["email_txt"].write_text(md, encoding="utf-8")
+    # Plain-text email gets the link as a trailing line; the blog copy does NOT
+    # (it would just link to itself).
+    p["email_txt"].write_text(md.rstrip() + f"\n\n---\n오늘 브리핑 웹페이지: {web_url}\n", encoding="utf-8")
     p["blog_md"].write_text(md, encoding="utf-8")
 
     print(f"html={p['email_html']}")
