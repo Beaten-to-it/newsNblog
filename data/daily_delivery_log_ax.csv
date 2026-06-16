@@ -2,3 +2,4 @@ date,status,message_id,sha,pages_url,completed,note
 2026-06-14,sent,19ec54b3806fa827,2079163,https://beaten-to-it.github.io/newsNblog/ax/posts/2026-06-14.html,2026-06-14T17:42:29,manual go-live first AX send
 2026-06-15,sent,,b4f4282,https://beaten-to-it.github.io/newsNblog/ax/posts/2026-06-15.html,2026-06-15T07:21:32,claude-driven pipeline
 2026-06-16,sent,19ecd87275e067a0,eee5c7d,https://beaten-to-it.github.io/newsNblog/ax/posts/2026-06-16.html,2026-06-16T08:04:42,recovered: rendered+emailed manually after catch-up timeout kill
+2026-06-17,sent,,3900c22,https://beaten-to-it.github.io/newsNblog/ax/posts/2026-06-17.html,2026-06-17T07:24:21,codex-driven pipeline
