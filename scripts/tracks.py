@@ -49,6 +49,18 @@ class Track:
         """Public GitHub Pages URL for this track's {date} post."""
         return f"{PAGES_BASE}/{self.pages_path}posts/{date}.html"
 
+    @property
+    def translations_dir(self) -> str:
+        """Source dir for Claude-generated Korean translation markdown."""
+        return f"translations/{self.key}"
+
+    def translated_md(self, date: str) -> Path:
+        return Path(self.translations_dir) / f"{date}.md"
+
+    def translated_url(self, date: str) -> str:
+        """Public GitHub Pages URL for this track's {date} translation page."""
+        return f"{PAGES_BASE}/{self.pages_path}translated/{date}.html"
+
 
 AI = Track(
     key="ai",

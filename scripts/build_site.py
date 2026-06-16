@@ -40,6 +40,9 @@ code { background:#f2f4f7; border-radius:6px; padding:1px 5px; font-size:.92em; 
 .post-list li { display:flex; justify-content:space-between; gap:16px; padding:14px 0; border-top:1px solid #edf0f6; }
 .post-list time { color:var(--muted); white-space:nowrap; }
 .site-footer { max-width:920px; margin:0 auto; padding:0 18px 36px; color:var(--muted); font-size:13px; text-align:center; }
+.post-toolbar { display:flex; justify-content:flex-end; gap:10px; margin:0 0 4px; }
+.xlate-btn { display:inline-block; background:#2563eb; color:#ffffff; font-weight:700; text-decoration:none; padding:9px 16px; border-radius:10px; font-size:14px; }
+.xlate-btn:hover { background:#1d4ed8; text-decoration:none; }
 @media (max-width:640px) { .site-header { display:block; } .hero, .post, .post-list { padding:22px; border-radius:16px; } .hero h1, .post h1 { font-size:28px; } .post-list li { display:block; } }
 """.strip() + "\n"
 
@@ -154,6 +157,20 @@ def build_track(track: "tracks.Track") -> list[Path]:
     site_posts.mkdir(parents=True, exist_ok=True)
     (site_dir / "assets").mkdir(parents=True, exist_ok=True)
 
+    # Renderable Korean translation pages, keyed by date. A file that is empty or
+    # the NO_FOREIGN_SOURCES sentinel is treated as "no translation" so the post
+    # button and the translation page stay in lockstep (no button -> no page,
+    # and never a button pointing at a missing page).
+    xlate_dir = ROOT / track.translations_dir
+    translations: dict[str, str] = {}
+    if xlate_dir.exists():
+        for tp in xlate_dir.glob("*.md"):
+            if tp.name.startswith("_"):
+                continue
+            txt = tp.read_text(encoding="utf-8").strip()
+            if txt and txt != "NO_FOREIGN_SOURCES":
+                translations[tp.stem] = txt + "\n"
+
     posts = []
     for md_path in sorted(posts_dir.glob("*.md"), reverse=True):
         if md_path.name.startswith("_"):
@@ -161,13 +178,37 @@ def build_track(track: "tracks.Track") -> list[Path]:
         date = md_path.stem
         md = md_path.read_text(encoding="utf-8")
         title = md.splitlines()[0].lstrip("# ").strip() if md.splitlines() else date
-        content = f'<article class="post">\n{render_markdown(md)}\n</article>'
+        toolbar = (
+            f'<div class="post-toolbar"><a class="xlate-btn" '
+            f'href="../translated/{date}.html">🌐 원문 한국어로 자세히</a></div>\n'
+            if date in translations else ""
+        )
+        content = f'<article class="post">\n{toolbar}{render_markdown(md)}\n</article>'
         (site_posts / f"{date}.html").write_text(
             page(title, content, brand=track.name, tagline=track.tagline,
                  description=title, css_href="../assets/style.css", home_href="../index.html"),
             encoding="utf-8",
         )
         posts.append((date, title, f"posts/{date}.html"))
+
+    # Translation pages: same template/CSS as posts, with a back-link to the post.
+    written_xlate: list[Path] = []
+    if translations:
+        site_xlate = site_dir / "translated"
+        site_xlate.mkdir(parents=True, exist_ok=True)
+        for date, tmd in sorted(translations.items(), reverse=True):
+            lines = tmd.splitlines()
+            ttitle = lines[0].lstrip("# ").strip() if lines else f"{date} {track.name}"
+            back = (f'<div class="post-toolbar"><a class="xlate-btn" '
+                    f'href="../posts/{date}.html">← 브리핑으로 돌아가기</a></div>\n')
+            tcontent = f'<article class="post">\n{back}{render_markdown(tmd)}\n</article>'
+            out = site_xlate / f"{date}.html"
+            out.write_text(
+                page(ttitle, tcontent, brand=track.name, tagline=track.tagline,
+                     description=ttitle, css_href="../assets/style.css", home_href="../index.html"),
+                encoding="utf-8",
+            )
+            written_xlate.append(out)
 
     items = "\n".join(
         f'<li><a href="{href}">{html.escape(title)}</a><time>{date}</time></li>'
@@ -189,7 +230,8 @@ def build_track(track: "tracks.Track") -> list[Path]:
         encoding="utf-8",
     )
     (site_dir / "assets" / "style.css").write_text(CSS, encoding="utf-8")
-    return [site_dir / "index.html", *(site_posts.glob("*.html")), site_dir / "assets" / "style.css"]
+    return [site_dir / "index.html", *(site_posts.glob("*.html")), *written_xlate,
+            site_dir / "assets" / "style.css"]
 
 
 def main() -> int:
